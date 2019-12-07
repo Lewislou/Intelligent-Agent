@@ -49,6 +49,7 @@ public class Agent8 extends AbstractNegotiationParty {
 	protected Random rand;
 	int rankSize;
 	Bid NashPoint = null;
+	Bid maxBid = null;
 	private Action lastReceivedAction = null;
 	private int numberOfParties = -1;
 	private NegotiationInfo info;
@@ -56,9 +57,9 @@ public class Agent8 extends AbstractNegotiationParty {
 	ValueDiscrete[] values = null;
 	List<Bid> bidList;
 	private Map<ValueDiscrete, Double> ValueMap = new HashMap<ValueDiscrete, Double>();//value and corresponding utility
-    List<Bid> subList = new ArrayList<Bid>();
-    boolean startConcende = false;
-    double maxUtil = 0;
+	List<Bid> subList = new ArrayList<Bid>();
+	boolean startConcende = false;
+	double maxUtil = 0;
 	double minUtil = 0;
 	double maxOppoU = 0;
 	double minOppoU = 0;
@@ -81,10 +82,14 @@ public class Agent8 extends AbstractNegotiationParty {
 		List<Issue> issues = additiveUtilitySpace.getDomain().getIssues(); // Create a list contains all the issues
 		int noIssues = issues.size();
 		BidRanking bidRanking = userModel.getBidRanking();
+		maxBid = getMaxUtilityBid();
 		bidSize = bidRanking.getSize();
 		bidList = bidRanking.getBidOrder();
 		HashSet<Integer> set = new HashSet<Integer>();
-		if(bidSize > 1000) {
+		if(bidSize > 2000){
+			randomSet(0, bidSize, (int) Math.ceil(bidSize*0.5), set);
+		}
+		else if(bidSize > 1000) {
 			randomSet(0, bidSize, (int) Math.ceil(bidSize*0.8), set);
 		}
 		else{
@@ -105,7 +110,7 @@ public class Agent8 extends AbstractNegotiationParty {
 		}
 
 		 */
-        rankSize = subList.size();
+		rankSize = subList.size();
 		double[] targets = new double[bidSize];
 		for (int i = 0; i < bidSize; i++) {
 			double min = bidRanking.getLowUtility();
@@ -162,9 +167,6 @@ public class Agent8 extends AbstractNegotiationParty {
 				}
 			}
 		}
-		Random fRandom = new Random();
-		double MEAN = 0.5f;
-		double VARIANCE = 1.0f;
 		double[] weights = new double[valueSum];//weights - values
 		for (int i = 0; i < valueSum; i++) {
 			weights[i] = 1.0/valueSum;
@@ -176,7 +178,7 @@ public class Agent8 extends AbstractNegotiationParty {
 		if(bidSize >= 500) {
 			learningRate = 0.00001;
 			iterations = (int) Math.ceil(rankSize * valueSum * 1.2); //Iterations
-			batch_size = 4;
+			batch_size = 8;
 		}
 		if(bidSize > 1000){
 			learningRate = 0.0001;
@@ -196,7 +198,7 @@ public class Agent8 extends AbstractNegotiationParty {
 
 		for(int label=0; label<bidList.size();label++) {
 			//System.out.println(EstimateUtility(bidList.get(label)));
-            double u1 = 0;
+			double u1 = 0;
 			Bid bid = bidList.get(label);
 			HashMap<Integer, Value> valueHashMap = bid.getValues();
 			int vSize = valueHashMap.size();
@@ -332,7 +334,7 @@ public class Agent8 extends AbstractNegotiationParty {
 			}
 			TotalLoss += Math.pow((Loss - targets[j]),2);
 		}
-       System.out.println("totalLoss:" + TotalLoss);
+		System.out.println("totalLoss:" + TotalLoss);
 
 
 	}
@@ -343,16 +345,8 @@ public class Agent8 extends AbstractNegotiationParty {
 	@Override
 	public Action chooseAction(List<Class<? extends Action>> possibleActions) {
 		double time = getTimeLine().getTime();// Gets the time, running from t = 0 (start) to t = 1 (deadlinne)
-		//double remainingTimeRatio = 1-time;
-		double maxUtil;
-		double conUtil;
-		double discount;
-		double BidUtility;
-		//double threshold = 0.6 - 0.5 * Math.pow(time, 3);
-		//System.out.println("++++++The threshold in the time++++++"+threshold);
-		HashSet<Bid> possibleBids;
 		HashSet<Bid> giveBids = new HashSet<Bid>();
-		giveBids.add(getMaxUtilityBid());
+		giveBids.add(maxBid);
 		Bid bestBid;
 
 		//int round = ((DiscreteTimeline) timeline).getRound();
@@ -446,15 +440,15 @@ public class Agent8 extends AbstractNegotiationParty {
 
 			}
 			else {
-				giveBid = getMaxUtilityBid();
-				return new Offer(getPartyId(), getMaxUtilityBid());
+				giveBid = maxBid;
+				return new Offer(getPartyId(), maxBid);
 
 
 			}
 		} else {
-			giveBid = getMaxUtilityBid();
+			giveBid = maxBid;
 			giveBids.add(giveBid);
-			return new Offer(getPartyId(),getMaxUtilityBid() );
+			return new Offer(getPartyId(),maxBid );
 
 		}
 	}
@@ -505,13 +499,13 @@ public class Agent8 extends AbstractNegotiationParty {
 
 		 */
 		else if(time < 0.995){
-			threshold = 0.2;
+			threshold = 0.15;
 			double ratio = Math.abs(MINIMUM_TARGET-EstimateUtility(NashPoint));
 			double weight = 0.0005/ratio;
 			MINIMUM_TARGET =MINIMUM_TARGET - weight*Math.abs(1-EstimateUtility(NashPoint))/(0.995 - 0.9)*(time - 0.9);
 		}
 		else if (time <= 0.997) {
-			threshold = 0.05;
+			threshold = 0.2;
 			double ratio = Math.abs(MINIMUM_TARGET-EstimateUtility(NashPoint));
 			double weight = 0.001/ratio;
 			MINIMUM_TARGET = MINIMUM_TARGET -weight*Math.abs(1-EstimateUtility(NashPoint))/(0.997 - 0.9)*(time - 0.9);
@@ -592,27 +586,36 @@ public class Agent8 extends AbstractNegotiationParty {
 	public Bid generateBids(){
 		List<Bid> suitbids = new ArrayList<Bid>();
 		BidRanking bidRanking = userModel.getBidRanking();
-		List<Bid> bidList = bidRanking.getBidOrder();
 		Bid BestBid = null;
+		double max_oppo = 0.0;
 		//int number = (int)Math.ceil(bidList.size() * threshold);
 		//System.out.println("The 18th bid in the ranking is:"+bidList.get(17));
 		//System.out.println("Number = "+number);
 		//double dist = getNashdist(bid1);
-		for(int label=bidList.size()-1; label>0;label--){
+		for(int label=bidSize*2; label>0;label--){
+			Bid bid = generateRandomBid();
 			//System.out.println(EstimateUtility(bidList.get(label)));
-			if(getEvaluation(bidList.get(label))[0]<threshold && getEvaluation(bidList.get(label))[1]>(1-threshold)*getEvaluation(bidList.get(label))[2]) {
-				suitbids.add(bidList.get(label));
+			//if(getEvaluation(bid)[0]<threshold && getEvaluation(bid)[1]>MINIMUM_TARGET*getEvaluation(bid)[2]) {
+			if(getEvaluation(bid)[0]<threshold && getEvaluation(bid)[1]>(1-threshold)*getEvaluation(bid)[2]) {
+				double dist = 0;
+				int count2 = 0;
+				for (Map.Entry<AgentID, OpponentModel> agentIDOpponentModelEntry : opponentModels.entrySet()) {
+					Map.Entry pair = (Map.Entry) agentIDOpponentModelEntry;
+					OpponentModel opponentModels = (OpponentModel) pair.getValue();
+					dist += (opponentModels.getUtility(bid));
+					count2++;
+				}
+				if((dist/count2) >= max_oppo){
+					max_oppo = dist/count2;
+					BestBid = bid;
+				}
 			}
 		}
-		if(suitbids.size() != 0){
-			int temp = suitbids.size();
-			//System.out.println("the size of temp" + temp);
-			int randi = new Random().nextInt(temp);
-			BestBid = suitbids.get(temp - 1 - randi);
+		if(BestBid == null){
+			BestBid = maxBid;
+
 		}
-		else{
-			BestBid = getMaxUtilityBid();
-		}
+
 		return BestBid;
 
 
