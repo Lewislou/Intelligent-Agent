@@ -173,7 +173,7 @@ public class Agent8 extends AbstractNegotiationParty {
 			//weights[i] =  MEAN+fRandom.nextGaussian()*VARIANCE;
 		}
 		double learningRate = 0.001;
-		int iterations = (int) Math.ceil(rankSize * valueSum*3);
+		int iterations = (int) Math.ceil(rankSize * valueSum*3.5);
 		int batch_size = 4;
 		if(bidSize >= 500) {
 			learningRate = 0.00001;
@@ -432,7 +432,7 @@ public class Agent8 extends AbstractNegotiationParty {
 						return new Accept(getPartyId(), lastOffer);
 					}
 				}
-				bestBid = generateBids();// issues.size:how many issues in total
+				bestBid = generateBids(time);// issues.size:how many issues in total
 				//bestBid = chooseBid(possibleBids);
 				//giveBids.add(bestBid);
 				giveBid = bestBid;
@@ -472,24 +472,27 @@ public class Agent8 extends AbstractNegotiationParty {
 	}
 	private void concende(double time) {
 
-		if(time<0.1){
+		if(time<0.3){
 			MINIMUM_TARGET = 0.95;
 			threshold = 0.05;
 		}
-		else if(time < 0.3){
-			MINIMUM_TARGET = 0.9;
-			threshold = 0.1;
-		}
 		else if(time < 0.75){
 			//double ratio = EstimateUtility(NashPoint)/EstimateUtility(getMaxUtilityBid());
-			MINIMUM_TARGET = 1-0.25*(1.1-EstimateUtility(NashPoint))*(time-0.3)/(0.5-0.3);
+			if(EstimateUtility(NashPoint) == 1.0){
+				MINIMUM_TARGET = 1-0.15*(1.2-EstimateUtility(NashPoint))*(time-0.3)/(0.75-0.3);
+			}
+			else{
+				MINIMUM_TARGET = 1-0.15*(1-EstimateUtility(NashPoint))*(time-0.3)/(0.75-0.3);
+			}
+
 			threshold = 0.1;
 		}
 		else if(time <= 0.9){
+
 			double ratio = Math.abs(MINIMUM_TARGET-EstimateUtility(NashPoint));
-			double weight = 0.05/ratio;
-			MINIMUM_TARGET = 1 - weight*(Math.abs(MINIMUM_TARGET-EstimateUtility(NashPoint)))*(time-0.3)/(0.5-0.3);
-			threshold = 0.1;
+			double weight = 0.05/(ratio);
+			MINIMUM_TARGET = 1 - weight*(Math.abs(MINIMUM_TARGET-EstimateUtility(NashPoint)))*(time-0.75)/(0.9-0.75);
+			threshold = 0.05;
 		}
 		/*
 		else if(time < 0.9){
@@ -499,16 +502,34 @@ public class Agent8 extends AbstractNegotiationParty {
 
 		 */
 		else if(time < 0.995){
-			threshold = 0.15;
-			double ratio = Math.abs(MINIMUM_TARGET-EstimateUtility(NashPoint));
-			double weight = 0.0005/ratio;
-			MINIMUM_TARGET =MINIMUM_TARGET - weight*Math.abs(1-EstimateUtility(NashPoint))/(0.995 - 0.9)*(time - 0.9);
+			threshold = 0.1;
+			if(MINIMUM_TARGET > 0.93){
+				double ratio = Math.abs(MINIMUM_TARGET-EstimateUtility(NashPoint));
+				double weight = 0.1/(ratio+1);
+				MINIMUM_TARGET =MINIMUM_TARGET - weight*Math.abs(MINIMUM_TARGET-EstimateUtility(NashPoint))/(0.995 - 0.9)*(time - 0.9);
+			}
+			else{
+				double ratio = Math.abs(MINIMUM_TARGET-EstimateUtility(NashPoint));
+				double weight = 0.05/(ratio+1);
+				MINIMUM_TARGET =MINIMUM_TARGET - weight*Math.abs(1-EstimateUtility(NashPoint))/(0.995 - 0.9)*(time - 0.9);
+			}
+
+			if(MINIMUM_TARGET < 0.75){
+				MINIMUM_TARGET = 0.75;
+			}
 		}
 		else if (time <= 0.997) {
-			threshold = 0.2;
+			threshold = 0.15;
 			double ratio = Math.abs(MINIMUM_TARGET-EstimateUtility(NashPoint));
-			double weight = 0.001/ratio;
-			MINIMUM_TARGET = MINIMUM_TARGET -weight*Math.abs(1-EstimateUtility(NashPoint))/(0.997 - 0.9)*(time - 0.9);
+			if(MINIMUM_TARGET > 0.9){
+				double weight = 0.01/ratio;
+				MINIMUM_TARGET = MINIMUM_TARGET -weight*Math.abs(MINIMUM_TARGET-EstimateUtility(NashPoint))/(0.997 - 0.9)*(time - 0.9);
+			}
+			else{
+				double weight = 0.001/ratio;
+				MINIMUM_TARGET = MINIMUM_TARGET -weight*Math.abs(MINIMUM_TARGET-EstimateUtility(NashPoint))/(0.997 - 0.9)*(time - 0.9);
+			}
+
 		}
 		else{
 			threshold = 0.2;
@@ -583,7 +604,7 @@ public class Agent8 extends AbstractNegotiationParty {
 		}
 		return null;
 	}
-	public Bid generateBids(){
+	public Bid generateBids(double time){
 		List<Bid> suitbids = new ArrayList<Bid>();
 		BidRanking bidRanking = userModel.getBidRanking();
 		Bid BestBid = null;
@@ -592,28 +613,45 @@ public class Agent8 extends AbstractNegotiationParty {
 		//System.out.println("The 18th bid in the ranking is:"+bidList.get(17));
 		//System.out.println("Number = "+number);
 		//double dist = getNashdist(bid1);
-		for(int label=bidSize*2; label>0;label--){
-			Bid bid = generateRandomBid();
-			//System.out.println(EstimateUtility(bidList.get(label)));
-			//if(getEvaluation(bid)[0]<threshold && getEvaluation(bid)[1]>MINIMUM_TARGET*getEvaluation(bid)[2]) {
-			if(getEvaluation(bid)[0]<threshold && getEvaluation(bid)[1]>(1-threshold)*getEvaluation(bid)[2]) {
-				double dist = 0;
-				int count2 = 0;
-				for (Map.Entry<AgentID, OpponentModel> agentIDOpponentModelEntry : opponentModels.entrySet()) {
-					Map.Entry pair = (Map.Entry) agentIDOpponentModelEntry;
-					OpponentModel opponentModels = (OpponentModel) pair.getValue();
-					dist += (opponentModels.getUtility(bid));
-					count2++;
-				}
-				if((dist/count2) >= max_oppo){
-					max_oppo = dist/count2;
+		if(time < 0.8) {
+			for (int label = bidSize * 2; label > 0; label--) {
+				Bid bid = generateRandomBid();
+				//System.out.println(EstimateUtility(bidList.get(label)));
+				//if(getEvaluation(bid)[0]<threshold && getEvaluation(bid)[1]>MINIMUM_TARGET*getEvaluation(bid)[2]) {
+				if (EstimateUtility(bid) >= MINIMUM_TARGET) {
 					BestBid = bid;
+
+				}
+				if (BestBid == null) {
+					BestBid = maxBid;
+
 				}
 			}
 		}
-		if(BestBid == null){
-			BestBid = maxBid;
+		else{
+			for (int label = bidSize * 2; label > 0; label--) {
+				Bid bid = generateRandomBid();
+				//System.out.println(EstimateUtility(bidList.get(label)));
+				//if(getEvaluation(bid)[0]<threshold && getEvaluation(bid)[1]>MINIMUM_TARGET*getEvaluation(bid)[2]) {
+				if (getEvaluation(bid)[0] < threshold && getEvaluation(bid)[1] > (1 - threshold) * getEvaluation(bid)[2]) {
+					double dist = 0;
+					int count2 = 0;
+					for (Map.Entry<AgentID, OpponentModel> agentIDOpponentModelEntry : opponentModels.entrySet()) {
+						Map.Entry pair = (Map.Entry) agentIDOpponentModelEntry;
+						OpponentModel opponentModels = (OpponentModel) pair.getValue();
+						dist += (opponentModels.getUtility(bid));
+						count2++;
+					}
+					if ((dist / count2) >= max_oppo) {
+						max_oppo = dist / count2;
+						BestBid = bid;
+					}
+				}
+			}
+			if (BestBid == null) {
+				BestBid = maxBid;
 
+			}
 		}
 
 		return BestBid;
